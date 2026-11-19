@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { ShoppingBag } from "lucide-react";
 import { CategoryTabs } from "@/components/pos/category-tabs";
-import { CheckoutDialog } from "@/components/pos/checkout-dialog";
+import { CheckoutDialog, type CheckoutPayment } from "@/components/pos/checkout-dialog";
 import { TableOrderDialog } from "@/components/tables/table-order-dialog";
 import { OrderCart } from "@/components/pos/order-cart";
 import { ProductGrid } from "@/components/pos/product-grid";
@@ -28,6 +28,7 @@ export function PosScreen() {
   const router = useRouter();
   const params = useSearchParams();
   const orderId = params.get("orderId");
+  const payParam = params.get("pay");
   const tableId = params.get("tableId");
   const store = usePosStore();
   const [catalog, setCatalog] = useState<CatalogDto | null>(null);
@@ -91,6 +92,7 @@ export function PosScreen() {
           if (cancel) return;
           usePosStore.getState().loadOrder(order);
           setDiscountInput(order.discountCents ? centsToInput(order.discountCents) : "");
+          if (payParam === "1" && order.status === "OPEN" && order.orderType === "TAKEAWAY") setCheckoutOpen(true);
         } else if (tableId) {
           const table = await api<TableDto>(`/api/tables/${tableId}`);
           if (cancel) return;
@@ -123,7 +125,7 @@ export function PosScreen() {
     return () => {
       cancel = true;
     };
-  }, [orderId, tableId, router]);
+  }, [orderId, tableId, router, payParam]);
 
   const currency = settings?.currency ?? "BZD";
   const locked = store.status !== "OPEN";
@@ -251,17 +253,17 @@ export function PosScreen() {
     } catch (e) { toast.error(e instanceof Error ? e.message : "Could not refresh the order."); }
   }
 
-  async function pay(tenderedCents: number) {
+  async function pay(payment: CheckoutPayment) {
     if (!store.orderId) return;
     setPaying(true);
     try {
       const paid = await api<OrderDto>(`/api/orders/${store.orderId}/checkout`, {
         method: "POST",
-        body: JSON.stringify({ tenderedCents, idempotencyKey, version: store.version }),
+        body: JSON.stringify({ ...payment, idempotencyKey, version: store.version }),
       });
       store.loadOrder(paid);
-      toast.success(`${paid.orderNumber} paid`);
-      return { changeCents: paid.payment?.changeCents ?? 0 };
+      toast.success(`${paid.orderNumber} paid by ${payment.method === "CARD" ? "card" : "cash"}`);
+      return { changeCents: paid.payment?.changeCents ?? 0, tipCents: paid.payment?.tipCents ?? 0, method: paid.payment?.method ?? payment.method, collectedCents: (paid.payment?.amountCents ?? 0) + (paid.payment?.tipCents ?? 0) };
     } catch (payError) {
       toast.error(payError instanceof Error ? payError.message : "Checkout failed.");
       throw payError;
@@ -397,6 +399,8 @@ export function PosScreen() {
         totalCents={due}
         currency={currency}
         receiptFooter={settings?.receiptFooter ?? ""}
+        tipsEnabled={settings?.tipsEnabled ?? true}
+        tipPresets={settings?.tipPresets}
         pending={paying}
         onOpenChange={(open) => {
           setCheckoutOpen(open);

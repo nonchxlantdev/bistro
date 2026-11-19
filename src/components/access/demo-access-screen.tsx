@@ -22,7 +22,7 @@ export function DemoAccessScreen({ step }: { step: "login" | "disclaimer" | "wel
   useEffect(() => {
     if (step !== "welcome") return;
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const timer = window.setTimeout(() => window.location.replace(next), reduce ? 1600 : 2400);
+    const timer = window.setTimeout(() => window.location.replace(`/staff?next=${encodeURIComponent(next)}`), reduce ? 1600 : 2400);
     return () => window.clearTimeout(timer);
   }, [step, next]);
 

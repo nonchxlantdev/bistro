@@ -1,6 +1,7 @@
 import { handle, readJson } from "@/lib/http";
 import { listOrders, saveOrder } from "@/lib/services/orders";
 import { parseSchema, saveOrderSchema } from "@/lib/validations/schemas";
+import { currentActor } from "@/lib/auth/current-staff";
 
 export const GET = (request: Request) =>
   handle(() => {
@@ -14,5 +15,5 @@ export const GET = (request: Request) =>
 export const POST = (request: Request) =>
   handle(async () => {
     const input = parseSchema(saveOrderSchema, await readJson(request));
-    return saveOrder(input);
+    return saveOrder(input, undefined, await currentActor());
   });

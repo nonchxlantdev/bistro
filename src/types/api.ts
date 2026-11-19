@@ -53,16 +53,19 @@ export type OrderDto = {
   updatedAt: string;
   completedAt: string | null;
   cancelledAt: string | null;
+  openedById: string | null;
+  closedById: string | null;
   items: OrderItemDto[];
   payment: null | {
     method: string;
     amountCents: number;
+    tipCents: number;
     tenderedCents: number;
     changeCents: number;
     idempotencyKey: string;
     createdAt: string;
   };
-  guestPayments: Array<{ guestName: string; amountCents: number; tenderedCents: number; changeCents: number; createdAt: string }>;
+  guestPayments: Array<{ guestName: string; method: string; amountCents: number; tipCents: number; tenderedCents: number; changeCents: number; createdAt: string }>;
 };
 
 export type TableDto = {
@@ -80,6 +83,8 @@ export type TableDto = {
     paidCents: number;
     balanceCents: number;
     openedAt: string;
+    /** Every kitchen ticket is served: the table is ready to pay. */
+    served: boolean;
   };
 };
 
@@ -89,6 +94,9 @@ export type SettingsDto = {
   locationAddress: string | null;
   currency: string;
   receiptFooter: string;
+  tipsEnabled: boolean;
+  tipPresets: number[];
+  defaultFloatCents: number;
   version: string;
 };
 

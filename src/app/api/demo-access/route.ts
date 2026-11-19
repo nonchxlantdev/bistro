@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { issueDemoSession, loadDemoConfig, SESSION_SECONDS, verifyDemoPassword, verifyDemoSession, type DemoStage } from "@/lib/auth/demo-access";
 import { DEMO_COOKIE } from "@/lib/demo-policy";
+import { STAFF_COOKIE } from "@/lib/auth/staff-session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -34,6 +35,7 @@ export async function POST(request: NextRequest) {
   if (input.action === "logout") {
     const response = NextResponse.json({ stage: "login" }, { headers });
     response.cookies.set(DEMO_COOKIE, "", { httpOnly: true, sameSite: "strict", secure: request.nextUrl.protocol === "https:", path: "/", maxAge: 0 });
+    response.cookies.set(STAFF_COOKIE, "", { httpOnly: true, sameSite: "strict", secure: request.nextUrl.protocol === "https:", path: "/", maxAge: 0 });
     return response;
   }
   try {

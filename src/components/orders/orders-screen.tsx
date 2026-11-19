@@ -36,6 +36,9 @@ export function OrdersScreen() {
   const [cancelTarget, setCancelTarget] = useState<OrderDto | null>(null);
   const [pending, setPending] = useState(false);
 
+  const [staff, setStaff] = useState<Array<{ id: string; name: string }>>([]);
+  useEffect(() => { api<Array<{ id: string; name: string }>>("/api/staff/manage").then(setStaff).catch(() => {}); }, []);
+  const staffName = (id: string | null) => (id ? staff.find((person) => person.id === id)?.name ?? null : null);
   async function load(nextStatus = status, nextQuery = query) {
     try {
       const params = new URLSearchParams();
@@ -134,7 +137,7 @@ export function OrdersScreen() {
       ) : null}
       {orders && orders.length > 0 ? (
         <div className="overflow-hidden rounded-xl border border-border bg-card">
-          <div className="hidden grid-cols-[1.2fr_0.8fr_0.8fr_0.7fr_0.6fr_0.9fr_1fr_auto] gap-3 border-b border-border px-4 py-3 text-xs text-muted-foreground lg:grid">
+          <div className="hidden grid-cols-[1fr_0.8fr_0.8fr_0.9fr_0.5fr_0.8fr_1.3fr_290px] gap-3 border-b border-border px-4 py-3 text-xs text-muted-foreground lg:grid">
             <span>Order</span>
             <span>Type</span>
             <span>Table</span>
@@ -145,22 +148,27 @@ export function OrdersScreen() {
             <span />
           </div>
           {orders.map((order) => (
-            <div key={order.id} className="grid gap-3 border-b border-border px-4 py-3 last:border-b-0 lg:grid-cols-[1.2fr_0.8fr_0.8fr_0.7fr_0.6fr_0.9fr_1fr_auto] lg:items-center">
+            <div key={order.id} className="grid gap-3 border-b border-border px-4 py-3 last:border-b-0 lg:grid-cols-[1fr_0.8fr_0.8fr_0.9fr_0.5fr_0.8fr_1.3fr_290px] lg:items-center">
               <button type="button" className="text-left font-medium hover:text-primary" onClick={() => openOrder(order)}>
                 {order.orderNumber}
               </button>
               <span className="text-sm">{order.orderType === "DINE_IN" ? "Dine-in" : "Takeaway"}</span>
               <span className="text-sm">{order.tableName ?? "—"}</span>
-              <OrderStatusBadge status={order.status as OrderStatus} />
+              {order.status === "OPEN" && order.kitchenServed ? <span className="status-chip status-ready">Ready to pay</span> : <OrderStatusBadge status={order.status as OrderStatus} />}
               <span className="text-sm">{order.itemCount}</span>
               <span className="text-sm font-medium">{formatMoney(order.totalCents, currency)}</span>
               <span className="text-sm text-muted-foreground">
                 {formatDateTime(order.createdAt)}
                 {order.completedAt ? ` · Paid ${formatDateTime(order.completedAt)}` : ""}
               </span>
-              <div className="flex gap-2">
-                <Button type="button" variant="outline" className="h-10" onClick={() => openOrder(order)}>
-                  {order.status === "OPEN" ? "Resume" : "View"}
+              <div className="flex gap-2 lg:justify-end">
+                {order.status === "OPEN" && (
+                  <Button type="button" variant={order.kitchenServed ? "default" : "outline"} className="h-10" onClick={() => router.push(`/orders/${order.id}/pay`)}>
+                    Take payment
+                  </Button>
+                )}
+                <Button type="button" variant={order.status === "OPEN" ? "ghost" : "outline"} className="h-10" onClick={() => openOrder(order)}>
+                  {order.status === "OPEN" ? "Edit" : "View"}
                 </Button>
                 {order.status === "OPEN" ? (
                   <Button type="button" variant="ghost" className="h-10" disabled={order.kitchenServed} title={order.kitchenServed ? "Served orders cannot be cancelled yet" : undefined} onClick={() => setCancelTarget(order)}>
@@ -177,7 +185,7 @@ export function OrdersScreen() {
         <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>{selected?.orderNumber}</DialogTitle>
-            <DialogDescription>Completed and cancelled orders are read-only.</DialogDescription>
+            <DialogDescription>Completed and cancelled orders are read-only.{selected && (staffName(selected.openedById) || staffName(selected.closedById)) ? ` Served by ${staffName(selected.openedById) ?? "—"} · Closed by ${staffName(selected.closedById) ?? "—"}.` : ""}</DialogDescription>
           </DialogHeader>
           {selected ? (
             <div className="space-y-3 text-sm">
@@ -199,15 +207,10 @@ export function OrdersScreen() {
                 <span>Total</span>
                 <span>{formatMoney(selected.totalCents, currency)}</span>
               </div>
-              {selected.payment ? (
-                <p className="text-muted-foreground">
-                  Cash received {formatMoney(selected.payment.tenderedCents, currency)} · Change{" "}
-                  {formatMoney(selected.payment.changeCents, currency)}
-                </p>
-              ) : null}
-              {selected.guestPayments.map((payment, index) => (
-                <p key={`${payment.createdAt}-${index}`} className="text-muted-foreground">
-                  {payment.guestName}: paid {formatMoney(payment.amountCents, currency)} · Cash {formatMoney(payment.tenderedCents, currency)} · Change {formatMoney(payment.changeCents, currency)}
+              {[...(selected.payment ? [{ ...selected.payment, guestName: "Table" }] : []), ...selected.guestPayments].map((payment, index) => (
+                <p key={`${payment.createdAt}-${index}`} className="flex justify-between gap-3 text-muted-foreground">
+                  <span>{payment.guestName} · {payment.method === "CARD" ? "Card" : "Cash"}{payment.tipCents ? ` · Tip ${formatMoney(payment.tipCents, currency)}` : ""}</span>
+                  <span className="tabular-nums">{formatMoney(payment.amountCents + payment.tipCents, currency)}{payment.method !== "CARD" && payment.changeCents ? ` (change ${formatMoney(payment.changeCents, currency)})` : ""}</span>
                 </p>
               ))}
               <p className="text-muted-foreground">Tax: Not configured</p>

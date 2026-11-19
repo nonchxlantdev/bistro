@@ -5,6 +5,9 @@ import { calculateOrderTotals, lineTotalCents } from "@/lib/domain/totals";
 import { quoteCashPayment } from "@/lib/domain/checkout";
 import { canCheckoutOrder, canEditOrder } from "@/lib/domain/order-rules";
 import { getTenant } from "@/lib/services/tenant";
+import { ensureOpenDay } from "@/lib/services/business-day";
+import { quoteTender } from "@/lib/domain/tender";
+import type { Actor } from "@/lib/services/guest-checks";
 import { kitchenOrderState } from "@/lib/domain/kitchen-snapshots";
 
 type Tx = Prisma.TransactionClient;
@@ -38,6 +41,8 @@ export type OrderDto = {
   updatedAt: string;
   completedAt: string | null;
   cancelledAt: string | null;
+  openedById: string | null;
+  closedById: string | null;
   items: Array<{
     id: string;
     productId: string | null;
@@ -51,12 +56,13 @@ export type OrderDto = {
   payment: null | {
     method: string;
     amountCents: number;
+    tipCents: number;
     tenderedCents: number;
     changeCents: number;
     idempotencyKey: string;
     createdAt: string;
   };
-  guestPayments: Array<{ guestName: string; amountCents: number; tenderedCents: number; changeCents: number; createdAt: string }>;
+  guestPayments: Array<{ guestName: string; method: string; amountCents: number; tipCents: number; tenderedCents: number; changeCents: number; createdAt: string }>;
 };
 
 export function toOrderDto(order: OrderRecord): OrderDto {
@@ -80,6 +86,8 @@ export function toOrderDto(order: OrderRecord): OrderDto {
     updatedAt: order.updatedAt.toISOString(),
     completedAt: order.completedAt?.toISOString() ?? null,
     cancelledAt: order.cancelledAt?.toISOString() ?? null,
+    openedById: order.openedById,
+    closedById: order.closedById,
     items: order.items.map((item) => ({
       id: item.id,
       productId: item.productId,
@@ -94,6 +102,7 @@ export function toOrderDto(order: OrderRecord): OrderDto {
       ? {
           method: order.payment.method,
           amountCents: order.payment.amountCents,
+          tipCents: order.payment.tipCents,
           tenderedCents: order.payment.tenderedCents,
           changeCents: order.payment.changeCents,
           idempotencyKey: order.payment.idempotencyKey,
@@ -101,7 +110,7 @@ export function toOrderDto(order: OrderRecord): OrderDto {
         }
       : null,
     guestPayments: order.guests.flatMap((guest) => guest.payments.map((payment) => ({
-      guestName: guest.displayName, amountCents: payment.amountCents, tenderedCents: payment.tenderedCents,
+      guestName: guest.displayName, method: payment.method, amountCents: payment.amountCents, tipCents: payment.tipCents, tenderedCents: payment.tenderedCents,
       changeCents: payment.changeCents, createdAt: payment.createdAt.toISOString(),
     }))),
   };
@@ -287,6 +296,7 @@ export async function saveOrder(
     items: ItemInput[];
   },
   db: PrismaClient = prisma,
+  actor: Actor = { staffId: null },
 ) {
   const tenant = await getTenant(db);
   const items = mergeItems(input.items);
@@ -312,6 +322,7 @@ export async function saveOrder(
             orderNumber,
             orderType: input.orderType,
             status: "OPEN",
+            openedById: actor.staffId,
             subtotalCents: totals.subtotalCents,
             discountCents: totals.discountCents,
             totalCents: totals.totalCents,
@@ -526,8 +537,9 @@ export async function cancelOrder(id: string, version: number, db: PrismaClient 
 
 export async function checkoutOrder(
   id: string,
-  input: { tenderedCents: number; idempotencyKey: string; version?: number },
+  input: { tenderedCents: number; idempotencyKey: string; version?: number; tipCents?: number; method?: "CASH" | "CARD" },
   db: PrismaClient = prisma,
+  actor: Actor = { staffId: null },
 ) {
   const tenant = await getTenant(db);
 
@@ -582,18 +594,31 @@ export async function checkoutOrder(
         subtotalCents += expected;
       }
       const totals = applyDiscount(subtotalCents, existing.discountCents);
-      const quote = quoteCashPayment(totals.totalCents, input.tenderedCents);
-      if (!quote.ok) {
-        throw new AppError(quote.message, 400, "INSUFFICIENT_CASH");
+      if (totals.totalCents <= 0) {
+        // Nothing to charge (fully discounted): record a zero cash payment.
+        const quote = quoteCashPayment(totals.totalCents, input.tenderedCents);
+        if (!quote.ok) throw new AppError(quote.message, 400, "INSUFFICIENT_CASH");
       }
+      let tender;
+      try {
+        tender = totals.totalCents > 0
+          ? quoteTender({ amountCents: totals.totalCents, tipCents: input.tipCents, method: input.method, tenderedCents: input.tenderedCents })
+          : { method: "CASH" as const, amountCents: 0, tipCents: 0, tenderedCents: input.tenderedCents, changeCents: input.tenderedCents };
+      } catch (error) {
+        throw new AppError(error instanceof Error ? error.message : "Check the payment.", 400, "INSUFFICIENT_CASH");
+      }
+      const day = await ensureOpenDay(tx, tenant.business.id, actor.staffId);
 
       await tx.payment.create({
         data: {
           orderId: existing.id,
-          method: "CASH",
-          amountCents: quote.amountCents,
-          tenderedCents: quote.tenderedCents,
-          changeCents: quote.changeCents,
+          method: tender.method,
+          amountCents: tender.amountCents,
+          tipCents: tender.tipCents,
+          tenderedCents: tender.tenderedCents,
+          changeCents: tender.changeCents,
+          staffId: actor.staffId,
+          dayId: day.id,
           idempotencyKey: input.idempotencyKey,
         },
       });
@@ -603,6 +628,7 @@ export async function checkoutOrder(
         data: {
           status: "COMPLETED",
           completedAt: new Date(),
+          closedById: actor.staffId,
           subtotalCents: totals.subtotalCents,
           discountCents: totals.discountCents,
           totalCents: totals.totalCents,

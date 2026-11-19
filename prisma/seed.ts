@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { randomBytes, scryptSync } from "node:crypto";
 import { createDatabaseAdapter } from "../src/lib/db/connection";
 import { PrismaClient } from "../src/generated/prisma/client";
 
@@ -43,6 +44,25 @@ const products = [
   ["prod_lemonade", DEMO_IDS.categories.drinks, "Lemonade", "House lemonade.", 500],
   ["prod_iced_tea", DEMO_IDS.categories.drinks, "Iced Tea", "Chilled black tea.", 500],
 ] as const;
+
+/** Demo team for the tap-name + PIN sign-in. PINs are shown on the sign-in screen (demo only). */
+export const DEMO_STAFF = [
+  { id: "staff_maria", name: "Maria", role: "MANAGER", pin: "1234" },
+  { id: "staff_daniel", name: "Daniel", role: "SERVER", pin: "1111" },
+  { id: "staff_ana", name: "Ana", role: "SERVER", pin: "2222" },
+  { id: "staff_luis", name: "Luis", role: "SERVER", pin: "3333" },
+] as const;
+
+/** Adds the demo team only when the business has no staff yet (never resets PINs). */
+export async function seedStaff(prisma: PrismaClient, businessId: string) {
+  if (await prisma.staff.count({ where: { businessId } })) return false;
+  for (const person of DEMO_STAFF) {
+    const salt = randomBytes(16).toString("hex");
+    const pinHash = (scryptSync(person.pin, salt, 32) as Buffer).toString("hex");
+    await prisma.staff.create({ data: { id: person.id, businessId, name: person.name, role: person.role, pinSalt: salt, pinHash } });
+  }
+  return true;
+}
 
 export async function seed(prisma: PrismaClient) {
   await prisma.business.upsert({
@@ -133,6 +153,7 @@ export async function seed(prisma: PrismaClient) {
       },
     });
   }
+  await seedStaff(prisma, DEMO_IDS.business);
 }
 
 async function main() {

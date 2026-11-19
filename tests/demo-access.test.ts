@@ -8,6 +8,7 @@ import { createDemoConfig, demoConfigPath, issueDemoSession, SESSION_SECONDS, ve
 import { DEMO_COOKIE, safeDemoDestination } from "@/lib/demo-policy";
 import { GET, POST } from "@/app/api/demo-access/route";
 import { proxy, config as proxyConfig } from "@/proxy";
+import { issueStaffSession, STAFF_COOKIE } from "@/lib/auth/staff-session";
 
 let folder: string;
 let config: DemoAccessConfig;
@@ -77,8 +78,19 @@ describe("demo access", () => {
     expect((await proxy(request("/pos", undefined, waiting))).headers.get("location")).toContain("/disclaimer?");
     expect((await proxy(request("/welcome", undefined, waiting))).headers.get("location")).toContain("/disclaimer?");
     const accepted = issueDemoSession("accepted", config);
-    expect((await proxy(request("/api/orders", undefined, accepted))).headers.get("x-middleware-next")).toBe("1");
-    expect((await proxy(request("/pos", undefined, accepted))).headers.get("Cache-Control")).toBe("no-store");
+    // After the disclaimer, staff must sign in (tap name + PIN) before the app or its APIs.
+    const noStaff = await proxy(request("/api/orders", undefined, accepted));
+    expect(noStaff.status).toBe(401);
+    expect((await noStaff.json()).code).toBe("STAFF_REQUIRED");
+    expect((await proxy(request("/pos", undefined, accepted))).headers.get("location")).toContain("/staff?next=%2Fpos");
+    expect((await proxy(request("/staff", undefined, accepted))).headers.get("x-middleware-next")).toBe("1");
+    expect((await proxy(request("/api/staff", undefined, accepted))).headers.get("x-middleware-next")).toBe("1");
+    const staff = issueStaffSession({ id: "staff_test", name: "Test", role: "SERVER" }, config);
+    const both = { Cookie: `${DEMO_COOKIE}=${accepted}; ${STAFF_COOKIE}=${staff}` };
+    expect((await proxy(request("/api/orders", undefined, undefined, both))).headers.get("x-middleware-next")).toBe("1");
+    expect((await proxy(request("/pos", undefined, undefined, both))).headers.get("Cache-Control")).toBe("no-store");
+    const forged = { Cookie: `${DEMO_COOKIE}=${accepted}; ${STAFF_COOKIE}=${staff.slice(0, -2)}xx` };
+    expect((await proxy(request("/api/orders", undefined, undefined, forged))).status).toBe(401);
     expect((await proxy(request("/login", undefined, accepted))).headers.get("location")).toContain("/welcome?");
   });
   it("clears access on logout and checks request origins", async () => {

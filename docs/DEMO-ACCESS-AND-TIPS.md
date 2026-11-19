@@ -1,6 +1,6 @@
 # Salud Bistro demo access and first-use guide
 
-The demo opens with a password form, then a required disclaimer, then a 2.4-second welcome using the existing official Salud Bistro wordmark. Reduced-motion preferences shorten the welcome and suppress movement. The existing espresso, cream, DM Sans and Fraunces identity is retained.
+The demo opens with a password form, then a required disclaimer, then a 2.4-second welcome using the official Salud Bistro wordmark, then staff sign-in (see STAFF-PAYMENTS-CLOSEOUT.md). Reduced-motion preferences shorten the welcome and suppress movement. The existing espresso, cream, DM Sans and Fraunces identity is retained.
 
 The disclaimer states that this is solely a demonstration, is still in development, is not a final product, uses simulated payments and must not be used for live sales, official records or sensitive personal information. Acceptance is required for each new login session. It is not stored as a permanent user account or legal acceptance record.
 

@@ -1,6 +1,8 @@
 export const DEMO_POLICY_VERSION = "2026-11-18";
 export const DEMO_COOKIE = "salud_demo_session";
-export const ACCESS_PAGES = ["/login", "/disclaimer", "/welcome"];
+export const ACCESS_PAGES = ["/login", "/disclaimer", "/welcome", "/staff"];
+/** Reachable after the demo gate without a staff sign-in. */
+export const STAFF_FREE_PATHS = ["/welcome", "/staff", "/api/staff", "/api/demo-access"];
 
 export const DEMO_NOTICES = [
   { title: "A demonstration, still in development", text: "Salud Bistro is a demo restaurant powered by Vision Forge Studio. This system is provided solely to explore and evaluate its features. It is not a final product and is not ready for live restaurant operations." },

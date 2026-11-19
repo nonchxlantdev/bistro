@@ -22,6 +22,8 @@ model Business {
   settings   BusinessSettings?
   counter    OrderCounter?
   modifierGroups ModifierGroup[]
+  staff      Staff[]
+  days       BusinessDay[]
 }
 
 model Location {
@@ -46,6 +48,11 @@ model BusinessSettings {
   businessName  String
   currency      String
   receiptFooter String   @default("")
+  /// Tip prompt at payment; presets are comma-separated percentages.
+  tipsEnabled   Boolean  @default(true)
+  tipPresets    String   @default("5,8,10,15")
+  /// Suggested opening cash float for a new business day.
+  defaultFloatCents Int  @default(10000)
   updatedAt     DateTime @updatedAt
 
   business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
@@ -144,6 +151,9 @@ model Order {
   updatedAt     DateTime  @updatedAt
   completedAt   DateTime?
   cancelledAt   DateTime?
+  /// Staff ids (no FK so history survives staff removal); names are resolved for display.
+  openedById    String?
+  closedById    String?
 
   business Business         @relation(fields: [businessId], references: [id], onDelete: Cascade)
   location Location         @relation(fields: [locationId], references: [id], onDelete: Restrict)
@@ -279,6 +289,9 @@ model GuestPayment {
   tenderedCents  Int
   changeCents    Int
   method         String @default("CASH")
+  tipCents       Int    @default(0)
+  staffId        String?
+  dayId          String?
   idempotencyKey String @unique
   createdAt      DateTime @default(now())
   guest          OrderGuest @relation(fields: [orderGuestId], references: [id], onDelete: Restrict)
@@ -293,8 +306,48 @@ model Payment {
   amountCents    Int
   tenderedCents  Int
   changeCents    Int
+  tipCents       Int      @default(0)
+  staffId        String?
+  dayId          String?
   idempotencyKey String   @unique
   createdAt      DateTime @default(now())
 
   order Order @relation(fields: [orderId], references: [id], onDelete: Restrict)
+}
+
+/// A person who signs in at the register: tap name, then enter a 4-digit PIN.
+model Staff {
+  id         String   @id @default(cuid())
+  businessId String
+  name       String
+  role       String   @default("SERVER")
+  pinSalt    String
+  pinHash    String
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@unique([businessId, name])
+  @@index([businessId, active])
+}
+
+/// One trading day: opened with a cash float, closed with a counted-cash check.
+model BusinessDay {
+  id                String    @id @default(cuid())
+  businessId        String
+  openedAt          DateTime  @default(now())
+  openedById        String?
+  openingFloatCents Int
+  closedAt          DateTime?
+  closedById        String?
+  countedCashCents  Int?
+  expectedCashCents Int?
+  notes             String    @default("")
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId, closedAt])
+  @@index([businessId, openedAt])
 }

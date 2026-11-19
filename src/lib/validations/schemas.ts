@@ -28,6 +28,8 @@ export const saveOrderSchema = z.object({
 
 export const checkoutSchema = z.object({
   tenderedCents: z.number().int().nonnegative(),
+  tipCents: z.number().int().nonnegative().max(100_000_000).optional(),
+  method: z.enum(["CASH", "CARD"]).optional(),
   idempotencyKey: z.string().trim().min(8).max(120),
   version: z.number().int().nonnegative().optional(),
 });
@@ -60,6 +62,9 @@ export const settingsSchema = z.object({
     .max(8)
     .regex(/^[A-Za-z]+$/, "Use a currency code such as BZD."),
   receiptFooter: z.string().trim().max(240),
+  tipsEnabled: z.boolean().optional(),
+  tipPresets: z.array(z.number().int().min(1).max(100)).max(6).optional(),
+  defaultFloatCents: z.number().int().min(0).max(10_000_000).optional(),
 });
 
 export const reservationSchema = z.object({

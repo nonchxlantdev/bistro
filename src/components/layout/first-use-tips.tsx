@@ -33,7 +33,7 @@ export function FirstUseTips() {
     return () => { window.removeEventListener(TIP_EVENT, show); window.removeEventListener(HELP_EVENT, openGuide); toast.dismiss("salud-first-use"); };
   }, []);
   useEffect(() => {
-    const id = ({ "/pos": "register", "/tables": "tables", "/kitchen": "kitchen", "/menu": "menu" } as const)[pathname as "/pos" | "/tables" | "/kitchen" | "/menu"];
+    const id = ({ "/pos": "register", "/tables": "tables", "/kitchen": "kitchen", "/menu": "menu", "/closeout": "closeout" } as const)[pathname as "/pos" | "/tables" | "/kitchen" | "/menu" | "/closeout"];
     if (!id) return;
     const timer = window.setTimeout(() => window.dispatchEvent(new CustomEvent(TIP_EVENT, { detail: id })), 650);
     return () => window.clearTimeout(timer);

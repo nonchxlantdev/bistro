@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, LayoutGrid, ReceiptText, Settings, ShoppingBag, UtensilsCrossed, ChefHat, type LucideIcon } from "lucide-react";
+import { LayoutDashboard, LayoutGrid, ReceiptText, Settings, ShoppingBag, UtensilsCrossed, ChefHat, Vault, type LucideIcon } from "lucide-react";
 import { cn } from "cn";
 import { BrandLogo } from "@/components/layout/brand-logo";
 import { DEMO_BRAND } from "@/lib/brand";
@@ -14,6 +14,7 @@ const links: Array<{ href: string; label: string; icon: LucideIcon }> = [
   { href: "/orders", label: "Orders", icon: ReceiptText },
   { href: "/kitchen", label: "Kitchen", icon: ChefHat },
   { href: "/menu", label: "Menu", icon: UtensilsCrossed },
+  { href: "/closeout", label: "End of day", icon: Vault },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 export function AppSidebar({ onNavigate, mode = "full" }: { onNavigate?: () => void; mode?: "full" | "rail" | "responsive" }) {

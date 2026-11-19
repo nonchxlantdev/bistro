@@ -2,7 +2,7 @@ import "dotenv/config";
 import { PrismaClient } from "../src/generated/prisma/client";
 import { createDatabaseAdapter, databaseConfig } from "../src/lib/db/connection";
 import { applyMigrations, createMigrationClient } from "./db-migrate";
-import { seed } from "../prisma/seed";
+import { seed, seedStaff } from "../prisma/seed";
 import { populateDemoService } from "../prisma/demo-service";
 import { DEMO_ARTWORK_PRODUCTS, demoArtwork } from "../prisma/demo-artwork";
 import { productImageExists, restoreProductImage } from "../src/lib/services/product-images";
@@ -26,6 +26,8 @@ async function main() {
   try {
     if (!await db.business.count()) { await seed(db); console.log("Seeded Salud Bistro menu, tables and settings."); }
     else console.log("Existing restaurant data found; seed skipped.");
+    const business = await db.business.findFirst({ select: { id: true } });
+    if (business && await seedStaff(db, business.id)) console.log("Added the demo team (Maria, Daniel, Ana, Luis).");
     if (process.env.SORA_SKIP_DEMO_SERVICE !== "1") {
       const result = await populateDemoService(db);
       console.log(result.alreadyPresent ? "Demo service checks already present." : `Added ${result.orders.length} demo service checks.`);

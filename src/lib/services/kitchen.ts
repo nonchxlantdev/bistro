@@ -60,7 +60,7 @@ export async function listKitchenTickets(db: PrismaClient = prisma) {
   const tickets = await db.kitchenTicket.findMany({ where: { order: { businessId: tenant.business.id, locationId: tenant.location.id } }, include: { order: { include: { table: true, kitchenTickets: { select: { id: true, orderVersion: true }, orderBy: { orderVersion: "asc" } } } } }, orderBy: { createdAt: "desc" }, take: 500 });
   return tickets.map((ticket) => {
     const index = ticket.order.kitchenTickets.findIndex((entry) => entry.id === ticket.id);
-    return { id: ticket.id, status: ticket.status, createdAt: ticket.createdAt.toISOString(), orderNumber: ticket.order.orderNumber, tableName: ticket.order.table?.name ?? "Takeaway", additionNumber: index, linkedTicketId: index > 0 ? ticket.order.kitchenTickets[index - 1].id : null, changes: JSON.parse(ticket.changesJson) as ChangeLine[] };
+    return { id: ticket.id, orderId: ticket.orderId, status: ticket.status, createdAt: ticket.createdAt.toISOString(), orderNumber: ticket.order.orderNumber, tableName: ticket.order.table?.name ?? "Takeaway", additionNumber: index, linkedTicketId: index > 0 ? ticket.order.kitchenTickets[index - 1].id : null, changes: JSON.parse(ticket.changesJson) as ChangeLine[] };
   });
 }
 

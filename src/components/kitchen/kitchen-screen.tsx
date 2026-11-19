@@ -1,10 +1,12 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { api } from "@/lib/api-client";
 import { formatElapsed } from "@/lib/format";
 type Status = "NEW" | "PREPARING" | "READY" | "SERVED";
-type Ticket = { id: string; status: Status; createdAt: string; orderNumber: string; tableName: string; additionNumber: number; linkedTicketId: string | null; changes: Array<{ name: string; quantity: number; modifiers?: string[]; instructions?: string }> };
+type Ticket = { id: string; orderId: string; status: Status; createdAt: string; orderNumber: string; tableName: string; additionNumber: number; linkedTicketId: string | null; changes: Array<{ name: string; quantity: number; modifiers?: string[]; instructions?: string }> };
 const states = ["ALL", "NEW", "PREPARING", "READY", "HISTORY"] as const;
 const steps: Status[] = ["NEW", "PREPARING", "READY", "SERVED"];
 const labels: Record<Status, string> = { NEW: "New", PREPARING: "Preparing", READY: "Ready", SERVED: "Served" };
@@ -22,9 +24,14 @@ export function KitchenScreen() {
     const timer = window.setInterval(() => void load(), 3000);
     return () => { active = false; window.clearInterval(timer); };
   }, [load]);
+  const router = useRouter();
   async function change(ticket: Ticket, to: Status) {
     setPending(ticket.id);
-    try { await api("/api/kitchen/" + ticket.id, { method: "PATCH", body: JSON.stringify({ from: ticket.status, to }) }); await load(); }
+    try {
+      await api("/api/kitchen/" + ticket.id, { method: "PATCH", body: JSON.stringify({ from: ticket.status, to }) }); await load();
+      // Served is the hand-off to the floor: point straight to closing out the check.
+      if (to === "SERVED") toast.success(`${ticket.orderNumber} served · ${ticket.tableName}`, { description: "Ready to take payment.", action: { label: "Take payment", onClick: () => router.push(`/orders/${ticket.orderId}/pay`) } });
+    }
     catch (e) { setError(e instanceof Error ? e.message : "Could not update ticket."); }
     finally { setPending(null); }
   }

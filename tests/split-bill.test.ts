@@ -16,7 +16,7 @@ describe("split-bill calculations", () => {
 
   it("records the intended partial payment and calculates change", () => {
     expect(quoteGuestPayment(2500, 1000, 2000)).toEqual({
-      amountCents: 1000, tenderedCents: 2000, changeCents: 1000,
+      method: "CASH", amountCents: 1000, tipCents: 0, tenderedCents: 2000, changeCents: 1000,
     });
     expect(() => quoteGuestPayment(1000, 1001, 2000)).toThrow(/exceeds/);
     expect(() => quoteGuestPayment(1000, 500, 499)).toThrow(/less than/);

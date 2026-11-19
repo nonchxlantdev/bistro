@@ -1,3 +1,4 @@
+import { quoteTender } from "@/lib/domain/tender";
 /** Divide cents in the supplied, stable guest order. Earlier guests receive the remainder. */
 export function splitEqually(amountCents: number, guestIds: string[]) {
   if (!Number.isSafeInteger(amountCents) || amountCents < 0) {
@@ -15,14 +16,13 @@ export function splitEqually(amountCents: number, guestIds: string[]) {
 }
 
 /** Validate a partial cash payment independently of the amount tendered. */
-export function quoteGuestPayment(balanceCents: number, amountCents: number, tenderedCents: number) {
+export function quoteGuestPayment(balanceCents: number, amountCents: number, tenderedCents: number, tipCents = 0, method: string = "CASH") {
   if (![balanceCents, amountCents, tenderedCents].every(Number.isSafeInteger) ||
       balanceCents < 0 || amountCents <= 0 || tenderedCents < 0) {
     throw new Error("Enter valid whole amounts in cents.");
   }
   if (amountCents > balanceCents) throw new Error("Payment exceeds the outstanding balance.");
-  if (tenderedCents < amountCents) throw new Error("Cash received is less than the payment amount.");
-  return { amountCents, tenderedCents, changeCents: tenderedCents - amountCents };
+  return quoteTender({ amountCents, tipCents, method, tenderedCents });
 }
 
 /** Existing proportional discount calculation; seat order breaks remainder ties. */

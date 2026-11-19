@@ -15,6 +15,9 @@ export async function api<T>(url: string, init?: RequestInit): Promise<T> {
   });
   const body = (await response.json().catch(() => ({}))) as { error?: string; code?: string };
   if (!response.ok) {
+    if (typeof window !== "undefined" && body.code === "STAFF_REQUIRED" && !url.startsWith("/api/staff")) {
+      window.location.replace(`/staff?next=${encodeURIComponent(window.location.pathname + window.location.search)}`);
+    }
     if (typeof window !== "undefined" && url !== "/api/demo-access" && (body.code === "DEMO_LOGIN_REQUIRED" || body.code === "DEMO_ACCEPTANCE_REQUIRED")) {
       window.location.replace(`${body.code === "DEMO_LOGIN_REQUIRED" ? "/login" : "/disclaimer"}?next=${encodeURIComponent(window.location.pathname + window.location.search)}`);
     }

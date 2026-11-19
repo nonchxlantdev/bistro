@@ -28,7 +28,7 @@ export async function listTables(db: PrismaClient = prisma): Promise<TableDto[]>
     include: {
       session: {
         include: {
-          order: { include: { guests: { include: { payments: true } } } },
+          order: { include: { guests: { include: { payments: true } }, kitchenTickets: { select: { status: true } } } },
         },
       },
     },
@@ -53,6 +53,7 @@ export async function listTables(db: PrismaClient = prisma): Promise<TableDto[]>
             paidCents: openOrder.guests.reduce((sum, guest) => sum + guest.payments.reduce((subtotal, payment) => subtotal + payment.amountCents, 0), 0),
             balanceCents: openOrder.totalCents - openOrder.guests.reduce((sum, guest) => sum + guest.payments.reduce((subtotal, payment) => subtotal + payment.amountCents, 0), 0),
             openedAt: openOrder.createdAt.toISOString(),
+            served: openOrder.kitchenTickets.length > 0 && openOrder.kitchenTickets.every((ticket) => ticket.status === "SERVED"),
           }
         : null,
     };

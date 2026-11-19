@@ -12,6 +12,7 @@ const titles: Record<string, { title: string; subtitle: string }> = {
   "/orders": { title: "Orders", subtitle: "Open checks & past service" },
   "/kitchen": { title: "Kitchen", subtitle: "The pass · Live preparation queue" },
   "/menu": { title: "Menu", subtitle: "Your dishes, drinks & finishing touches" },
+  "/closeout": { title: "End of day", subtitle: "Cash float, payments and close-out" },
   "/settings": { title: "Settings", subtitle: "Restaurant identity & local system" },
 };
 export function AppHeader({ onMenu, navState, sheetOpen, location }: { onMenu: () => void; navState: "open" | "closed" | null; sheetOpen: boolean; location: string }) {

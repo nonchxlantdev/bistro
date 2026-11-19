@@ -5,6 +5,11 @@ import { quoteGuestPayment } from "@/lib/domain/split-bill";
 import { splitEqually, guestDiscounts } from "@/lib/domain/split-bill";
 import { planSettlement } from "@/lib/domain/settlement-plan";
 import { getTenant } from "@/lib/services/tenant";
+import { ensureOpenDay } from "@/lib/services/business-day";
+import { quoteTender } from "@/lib/domain/tender";
+
+/** Who is acting (from the staff sign-in). Optional so scripts and tests can run without it. */
+export type Actor = { staffId: string | null };
 
 const include = {
   table: true,
@@ -35,6 +40,7 @@ function summary(order: CheckOrder) {
     id: order.id, orderNumber: order.orderNumber, tableName: order.table?.name ?? null,
     status: order.status, version: order.version, createdAt: order.createdAt, subtotalCents: order.subtotalCents,
     discountCents: order.discountCents, totalCents: order.totalCents, complete, legacyPayment: order.payment,
+    openedById: order.openedById, closedById: order.closedById,
     items: order.items.map((item, index) => ({ id: item.id, name: item.productNameSnapshot, quantity: item.quantity,
       unitPriceCents: item.unitPriceCents, lineTotalCents: item.lineTotalCents, allocatedCents: allocated[index],
       instructions: item.instructions, modifiers: item.modifiers.map((modifier) => ({ name: modifier.optionName, priceDeltaCents: modifier.priceDeltaCents })), allocations: item.allocations })),
@@ -64,11 +70,11 @@ export type GuestAction =
   | { action: "allocate"; version: number; itemId: string; allocations: Array<{ guestId: string; amountCents: number; quantityUnits: number | null }> }
   | { action: "splitAll"; version: number }
   | { action: "configureSplit"; version: number; mode: "equal" | "custom"; count: number; amounts?: number[] }
-  | { action: "payRemaining"; version: number; amountCents: number; tenderedCents: number; idempotencyKey: string }
-  | { action: "pay"; version: number; guestId: string; amountCents: number; tenderedCents: number; idempotencyKey: string }
+  | { action: "payRemaining"; version: number; amountCents: number; tenderedCents: number; tipCents?: number; method?: "CASH" | "CARD"; idempotencyKey: string }
+  | { action: "pay"; version: number; guestId: string; amountCents: number; tenderedCents: number; tipCents?: number; method?: "CASH" | "CARD"; idempotencyKey: string }
   | { action: "close"; version: number };
 
-export async function updateGuestChecks(id: string, input: GuestAction, db: PrismaClient = prisma) {
+export async function updateGuestChecks(id: string, input: GuestAction, db: PrismaClient = prisma, actor: Actor = { staffId: null }) {
   const tenant = await getTenant(db);
   if (input.action === "payRemaining") {
     const replay = await db.guestPayment.findUnique({ where: { idempotencyKey: input.idempotencyKey }, include: { guest: true } });
@@ -159,7 +165,10 @@ export async function updateGuestChecks(id: string, input: GuestAction, db: Pris
       if (allocations.length) await tx.guestItemAllocation.createMany({ data: allocations });
     } else if (input.action === "payRemaining") {
       const remaining = order.totalCents - state.guests.reduce((sum, guest) => sum + guest.paidCents, 0);
-      if (remaining <= 0 || input.amountCents !== remaining || input.tenderedCents < remaining) throw new AppError("The balance or cash received has changed. Refresh and try again.", 409, "INVALID_PAYMENT");
+      if (remaining <= 0 || input.amountCents !== remaining) throw new AppError("The balance has changed. Refresh and try again.", 409, "INVALID_PAYMENT");
+      let tender;
+      try { tender = quoteTender({ amountCents: remaining, tipCents: input.tipCents, method: input.method, tenderedCents: input.tenderedCents }); }
+      catch (error) { throw new AppError(error instanceof Error ? error.message : "Invalid payment.", 400, "INVALID_PAYMENT"); }
       if (await tx.payment.findUnique({ where: { idempotencyKey: input.idempotencyKey } })) throw new AppError("That payment key was used for another sale.", 409, "IDEMPOTENCY_CONFLICT");
       await claim(tx, order, input.version);
       let recipient = state.guests.find((guest) => guest.paidCents === 0);
@@ -179,9 +188,13 @@ export async function updateGuestChecks(id: string, input: GuestAction, db: Pris
       const allocated = summary(await load(tx, id, tenant.business.id));
       const balances = allocated.guests.filter((guest) => guest.balanceCents > 0);
       if (!allocated.complete || balances.reduce((sum, guest) => sum + guest.balanceCents, 0) !== remaining) throw new AppError("The guest balances could not be settled.", 409, "INVALID_PAYMENT");
+      const day = await ensureOpenDay(tx, tenant.business.id, actor.staffId);
       for (const [index, guest] of balances.entries()) {
-        const change = index === 0 ? input.tenderedCents - remaining : 0;
-        await tx.guestPayment.create({ data: { orderGuestId: guest.id, amountCents: guest.balanceCents, tenderedCents: guest.balanceCents + change, changeCents: change, idempotencyKey: index === 0 ? input.idempotencyKey : `${input.idempotencyKey}:${index}` } });
+        // The first row carries the tip and the change; card rows tender exactly what is charged.
+        const first = index === 0;
+        const tip = first ? tender.tipCents : 0;
+        const change = first ? tender.changeCents : 0;
+        await tx.guestPayment.create({ data: { orderGuestId: guest.id, amountCents: guest.balanceCents, tipCents: tip, tenderedCents: guest.balanceCents + tip + change, changeCents: change, method: tender.method, staffId: actor.staffId, dayId: day.id, idempotencyKey: first ? input.idempotencyKey : `${input.idempotencyKey}:${index}` } });
       }
     } else if (input.action === "pay") {
       if (await tx.payment.findUnique({ where: { idempotencyKey: input.idempotencyKey } })) {
@@ -191,22 +204,23 @@ export async function updateGuestChecks(id: string, input: GuestAction, db: Pris
       if (!guest) throw new AppError("Guest not found.", 404, "GUEST_NOT_FOUND");
       if (!state.complete) throw new AppError("Assign all items before taking payment.", 409, "UNASSIGNED_ITEMS");
       let quote;
-      try { quote = quoteGuestPayment(guest.balanceCents, input.amountCents, input.tenderedCents); }
+      try { quote = quoteGuestPayment(guest.balanceCents, input.amountCents, input.tenderedCents, input.tipCents ?? 0, input.method ?? "CASH"); }
       catch (error) { throw new AppError(error instanceof Error ? error.message : "Invalid payment.", 400, "INVALID_PAYMENT"); }
       await claim(tx, order, input.version);
-      await tx.guestPayment.create({ data: { ...quote, orderGuestId: guest.id, idempotencyKey: input.idempotencyKey } });
+      const day = await ensureOpenDay(tx, tenant.business.id, actor.staffId);
+      await tx.guestPayment.create({ data: { ...quote, orderGuestId: guest.id, staffId: actor.staffId, dayId: day.id, idempotencyKey: input.idempotencyKey } });
     } else {
       if (!state.complete || !state.guests.length || state.guests.some((g) => g.balanceCents !== 0)) {
         throw new AppError("Assign every item and settle every guest balance before closing.", 409, "BALANCE_REMAINS");
       }
       await claim(tx, order, input.version);
-      await tx.order.update({ where: { id }, data: { status: "COMPLETED", completedAt: new Date() } });
+      await tx.order.update({ where: { id }, data: { status: "COMPLETED", completedAt: new Date(), closedById: actor.staffId } });
       await tx.tableSession.deleteMany({ where: { orderId: id } });
     }
     return summary(await load(tx, id, tenant.business.id));
   });
   } catch (error) {
-    if (input.action === "payRemaining" && isUniqueConstraint(error) && await db.guestPayment.findUnique({ where: { idempotencyKey: input.idempotencyKey } })) return updateGuestChecks(id, input, db);
+    if (input.action === "payRemaining" && isUniqueConstraint(error) && await db.guestPayment.findUnique({ where: { idempotencyKey: input.idempotencyKey } })) return updateGuestChecks(id, input, db, actor);
     if (input.action === "pay" && isUniqueConstraint(error)) {
       const replay = await db.guestPayment.findUnique({ where: { idempotencyKey: input.idempotencyKey }, include: { guest: true } });
       if (replay && replay.guest.orderId === id && replay.orderGuestId === input.guestId &&
