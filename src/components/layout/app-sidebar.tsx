@@ -34,7 +34,7 @@ export function AppSidebar({ onNavigate, mode = "full" }: { onNavigate?: () => v
         </Link>;
       })}
     </nav>
-    <div className={cn("border-t border-sidebar-border px-5 py-4 text-xs leading-5 text-sidebar-foreground/70", label)}><p>{DEMO_BRAND.environment}</p><p>Local Development</p><p className="mt-2 text-[11px]">{DEMO_BRAND.platform} · {APP_VERSION}</p></div>
+    <div className={cn("border-t border-sidebar-border px-5 py-4 text-xs leading-5 text-sidebar-foreground/70", label)}><p>{DEMO_BRAND.environment}</p><p>{process.env.NEXT_PUBLIC_SORA_HOSTED ? "Live Demo" : "Local Development"}</p><p className="mt-2 text-[11px]">{DEMO_BRAND.platform} · {APP_VERSION}</p></div>
   </div>;
 }
 

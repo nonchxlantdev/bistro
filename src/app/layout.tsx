@@ -9,7 +9,7 @@ const fraunces = localFont({ src: "../assets/fonts/fraunces.ttf", variable: "--f
 
 export const metadata: Metadata = {
   title: "Salud Bistro — Demo",
-  description: "Salud Bistro demo restaurant · Powered by Vision Forge Studio · Local Development",
+  description: "Salud Bistro demo restaurant · Powered by Vision Forge Studio",
   icons: { icon: "/branding/salud-bistro-logo.png" },
 };
 

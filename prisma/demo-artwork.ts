@@ -1,5 +1,13 @@
 import sharp from "sharp";
 
+export type DemoArtworkKind = "coffee" | "burger" | "tart";
+/** Demo "Bistro Specials" products and the illustration each uses (ids from prisma/demo-service.ts). */
+export const DEMO_ARTWORK_PRODUCTS: Record<string, DemoArtworkKind> = {
+  salud_service_demo_v1_coffee: "coffee",
+  salud_service_demo_v1_burger: "burger",
+  salud_service_demo_v1_tart: "tart",
+};
+
 /** Original code-drawn illustrations, explicitly labeled; no borrowed food photos. */
 export async function demoArtwork(kind: "coffee" | "burger" | "tart") {
   const drawings = {

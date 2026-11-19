@@ -147,7 +147,7 @@ export function MenuScreen() {
             <div className="flex size-12 items-center justify-center overflow-hidden rounded-lg border border-border bg-muted text-xs font-semibold text-muted-foreground">{product.imagePath ? (
               // Local images are served through the validated application image route.
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={product.imageThumbnailPath ?? product.imagePath} alt="" loading="lazy" decoding="async" className="size-full object-cover" />
+              <img src={product.imageThumbnailPath ?? product.imagePath} alt="" loading="lazy" decoding="async" className="size-full object-cover" onError={(event) => { event.currentTarget.style.display = "none"; }} />
             ) : product.name.slice(0, 2).toUpperCase()}</div>
             <button type="button" className="min-w-0 text-left" onClick={() => editProduct(product)}><span className="block truncate text-sm font-semibold">{product.name}</span><span className="text-xs text-muted-foreground">{product.categoryName}{product.modifierGroups?.length ? " · " + product.modifierGroups.length + " modifier groups" : ""}</span></button>
             <span className="text-right text-sm font-medium">{formatMoney(product.priceCents, currency)}</span>

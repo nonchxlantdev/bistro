@@ -20,7 +20,9 @@ export function productImageDirectory() {
  * whose file system is read-only — otherwise the local data/product-images folder.
  * Either way images are only ever served through the authenticated /api/product-images route.
  */
-const blobStorageEnabled = () => Boolean(process.env.BLOB_READ_WRITE_TOKEN);
+// A connected store provides either a read-write token or, on newer Vercel projects, BLOB_STORE_ID
+// with Vercel's built-in OIDC sign-in (picked up automatically by @vercel/blob).
+const blobStorageEnabled = () => Boolean(process.env.BLOB_READ_WRITE_TOKEN || process.env.BLOB_STORE_ID);
 const blobPath = (filename: string) => `product-images/${filename}`;
 const blobAccess = () => (process.env.SORA_BLOB_ACCESS === "public" ? "public" : "private") as "public" | "private";
 
@@ -63,12 +65,15 @@ export async function removeStoredImages(paths: Array<string | null | undefined>
   }
 }
 
-export async function storeProductImage(bytes: Buffer): Promise<StoredProductImage> {
-  if (!bytes.length || bytes.length > MAX_IMAGE_BYTES) throw new AppError("Choose an image up to 5 MB.", 413, "IMAGE_SIZE");
-  const supportedHeader = (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff)
-    || bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
-    || (bytes.toString("ascii", 0, 4) === "RIFF" && bytes.toString("ascii", 8, 12) === "WEBP");
-  if (!supportedHeader) throw new AppError("Choose a valid JPEG, PNG or WebP image.", 400, "INVALID_IMAGE");
+/** True when the stored file behind a managed /api/product-images URL can be read. */
+export async function productImageExists(url: string | null | undefined) {
+  const filename = managedImageFilename(url);
+  if (!filename) return false;
+  try { await readImageFile(filename); return true; } catch { return false; }
+}
+
+/** Validates, re-encodes (stripping metadata) and sizes an uploaded image into full + thumbnail WebP. */
+async function renderProductImage(bytes: Buffer) {
   let image: Buffer, thumbnail: Buffer;
   try {
     const source = sharp(bytes, { limitInputPixels: 40_000_000, failOn: "warning" });
@@ -78,6 +83,32 @@ export async function storeProductImage(bytes: Buffer): Promise<StoredProductIma
     image = await source.rotate().resize({ width: 1200, height: 1200, fit: "inside", withoutEnlargement: true }).webp({ quality: 82 }).toBuffer();
     thumbnail = await sharp(image).resize({ width: 320, height: 320, fit: "inside", withoutEnlargement: true }).webp({ quality: 78 }).toBuffer();
   } catch { throw new AppError("Choose a valid, non-animated JPEG, PNG or WebP image (up to 40 megapixels).", 400, "INVALID_IMAGE"); }
+  return { image, thumbnail };
+}
+
+/**
+ * Re-creates a missing stored image under its existing URLs, so database references stay valid.
+ * Used to recover demo illustrations (for example, ones saved before the Blob store was connected).
+ */
+export async function restoreProductImage(paths: { imagePath: string | null; imageThumbnailPath: string | null }, bytes: Buffer) {
+  const { image, thumbnail } = await renderProductImage(bytes);
+  if (!blobStorageEnabled()) await mkdir(productImageDirectory(), { recursive: true });
+  for (const [url, data] of [[paths.imagePath, image], [paths.imageThumbnailPath, thumbnail]] as const) {
+    const filename = managedImageFilename(url);
+    if (filename && !await productImageExists(url)) await writeImageFile(filename, data);
+  }
+  return { image, thumbnail };
+}
+
+export async function storeProductImage(bytes: Buffer): Promise<StoredProductImage> {
+  // On Vercel the local disk is temporary: saving there would produce images that vanish.
+  if (process.env.VERCEL && !blobStorageEnabled()) throw new AppError("Photo storage is not connected. Connect a private Vercel Blob store to this project, then redeploy.", 503, "IMAGE_STORAGE_MISSING");
+  if (!bytes.length || bytes.length > MAX_IMAGE_BYTES) throw new AppError("Choose an image up to 5 MB.", 413, "IMAGE_SIZE");
+  const supportedHeader = (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff)
+    || bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+    || (bytes.toString("ascii", 0, 4) === "RIFF" && bytes.toString("ascii", 8, 12) === "WEBP");
+  if (!supportedHeader) throw new AppError("Choose a valid JPEG, PNG or WebP image.", 400, "INVALID_IMAGE");
+  const { image, thumbnail } = await renderProductImage(bytes);
   const key = randomUUID();
   const stored = { imagePath: `${routePrefix}${key}.webp`, imageThumbnailPath: `${routePrefix}${key}-thumb.webp` };
   if (!blobStorageEnabled()) await mkdir(productImageDirectory(), { recursive: true });
