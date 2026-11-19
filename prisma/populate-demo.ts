@@ -2,16 +2,16 @@ import "dotenv/config";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import Database from "better-sqlite3";
-import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
+import { createDatabaseAdapter, databaseConfig } from "../src/lib/db/connection";
 import { PrismaClient } from "../src/generated/prisma/client";
 import { DEMO_PREFIX, populateDemoService } from "./demo-service";
 
 async function main() {
-  const url = process.env.DATABASE_URL ?? "file:./prisma/dev.db";
-  if (!url.startsWith("file:")) throw new Error("Demo population expects a local SQLite database.");
-  const db = new PrismaClient({ adapter: new PrismaBetterSqlite3({ url }) });
+  const { url, remote } = databaseConfig();
+  const db = new PrismaClient({ adapter: createDatabaseAdapter() });
   try {
-    if (!await db.order.count({ where: { id: { startsWith: DEMO_PREFIX + "_order_" } } })) {
+    // Local SQLite files get a backup first; hosted (Turso) databases are backed up by the provider.
+    if (!remote && !await db.order.count({ where: { id: { startsWith: DEMO_PREFIX + "_order_" } } })) {
       await mkdir("backups", { recursive: true });
       const target = path.resolve("backups", `pre-demo-service-${new Date().toISOString().replace(/[:.]/g, "-")}.db`);
       const source = new Database(path.resolve(url.slice(5)), { readonly: true, fileMustExist: true });

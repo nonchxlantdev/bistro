@@ -13,13 +13,16 @@
     "demo:access": "tsx scripts/configure-demo-access.ts",
     "postinstall": "prisma generate",
     "db:migrate": "prisma migrate dev",
-    "db:deploy": "prisma migrate deploy"
+    "db:deploy": "tsx scripts/db-migrate.ts",
+    "db:setup": "tsx scripts/db-setup.ts",
+    "vercel-build": "tsx scripts/db-setup.ts && next build --webpack"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",
-    "@prisma/adapter-better-sqlite3": "^7.10.1",
+    "@libsql/client": "^0.17.4",
+    "@prisma/adapter-libsql": "^7.10.1",
     "@prisma/client": "^7.10.1",
-    "better-sqlite3": "^12.11.1",
+    "@vercel/blob": "^2.9.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cn": "^0.5.2",
@@ -37,11 +40,13 @@
     "zustand": "^5.1.0"
   },
   "devDependencies": {
+    "@prisma/adapter-better-sqlite3": "^7.10.1",
     "@tailwindcss/postcss": "^4.3.3",
     "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^24.19.2",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "better-sqlite3": "^12.11.1",
     "eslint": "^9",
     "eslint-config-next": "16.4.6",
     "prisma": "^7.10.1",

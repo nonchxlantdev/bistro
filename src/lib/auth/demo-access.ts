@@ -14,8 +14,18 @@ export function demoConfigPath() {
   return path.resolve(process.env.SORA_DATA_DIR || "./data", "demo-access.json");
 }
 
+/**
+ * Hosted deployments (Vercel) supply the access settings as environment variables, because the
+ * data folder is not deployed. Local installs keep using data/demo-access.json.
+ */
+export function demoConfigFromEnv(env: NodeJS.ProcessEnv = process.env): DemoAccessConfig | null {
+  const { SORA_DEMO_PASSWORD_SALT: salt, SORA_DEMO_PASSWORD_HASH: passwordHash, SORA_DEMO_SESSION_SECRET: signingSecret } = env;
+  if (!salt && !passwordHash && !signingSecret) return null;
+  return { version: 1, salt: salt?.trim() ?? "", passwordHash: passwordHash?.trim() ?? "", signingSecret: signingSecret?.trim() ?? "" };
+}
+
 export async function loadDemoConfig(): Promise<DemoAccessConfig> {
-  const config: DemoAccessConfig = JSON.parse(await readFile(demoConfigPath(), "utf8"));
+  const config: DemoAccessConfig = demoConfigFromEnv() ?? JSON.parse(await readFile(demoConfigPath(), "utf8"));
   if (config.version !== 1 || !/^[a-f0-9]{32}$/.test(config.salt) || !/^[a-f0-9]{128}$/.test(config.passwordHash) || !/^[a-f0-9]{64}$/.test(config.signingSecret)) throw new Error("Invalid demo access configuration.");
   return config;
 }

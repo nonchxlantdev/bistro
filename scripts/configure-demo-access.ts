@@ -8,6 +8,11 @@ async function main() {
   if (!password) throw new Error("Set SORA_DEMO_PASSWORD for this command, then run npm run demo:access. The password is stored only as a salted hash.");
   const config = await createDemoConfig(password);
   delete process.env.SORA_DEMO_PASSWORD;
+  if (process.argv.includes("--env")) {
+    // For hosted deployments: paste these three lines into the host's environment variables.
+    console.log(`SORA_DEMO_PASSWORD_SALT=${config.salt}\nSORA_DEMO_PASSWORD_HASH=${config.passwordHash}\nSORA_DEMO_SESSION_SECRET=${config.signingSecret}`);
+    return;
+  }
   const target = demoConfigPath();
   await mkdir(path.dirname(target), { recursive: true });
   // Explicit setup also rotates the session secret, invalidating existing sessions.

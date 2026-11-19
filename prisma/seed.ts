@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
+import { createDatabaseAdapter } from "../src/lib/db/connection";
 import { PrismaClient } from "../src/generated/prisma/client";
 
 export const DEMO_IDS = {
@@ -136,8 +136,7 @@ export async function seed(prisma: PrismaClient) {
 }
 
 async function main() {
-  const url = process.env.DATABASE_URL ?? "file:./prisma/dev.db";
-  const prisma = new PrismaClient({ adapter: new PrismaBetterSqlite3({ url }) });
+  const prisma = new PrismaClient({ adapter: createDatabaseAdapter() });
   try {
     await seed(prisma);
     console.log("Seed complete. Existing sales were left untouched.");
@@ -146,7 +145,8 @@ async function main() {
   }
 }
 
-if (process.env.VITEST !== "true") {
+// Run only when executed directly (npm run seed), not when imported by scripts/db-setup.ts or tests.
+if (process.env.VITEST !== "true" && /prisma[\\/]seed\.ts$/.test(process.argv[1] ?? "")) {
   main().catch((error) => {
     console.error(error);
     process.exit(1);

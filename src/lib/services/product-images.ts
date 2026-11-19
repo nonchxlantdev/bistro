@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, open, unlink, readFile, lstat } from "node:fs/promises";
 import path from "node:path";
 import sharp from "sharp";
+import { BlobNotFoundError, del, get, put } from "@vercel/blob";
 import { AppError } from "@/lib/errors";
 
 export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
@@ -14,6 +15,41 @@ export function productImageDirectory() {
   return path.resolve(process.env.SORA_DATA_DIR ?? path.join(process.cwd(), "data"), "product-images");
 }
 
+/**
+ * Storage backend: Vercel Blob (private store) when BLOB_READ_WRITE_TOKEN is set — required on Vercel,
+ * whose file system is read-only — otherwise the local data/product-images folder.
+ * Either way images are only ever served through the authenticated /api/product-images route.
+ */
+const blobStorageEnabled = () => Boolean(process.env.BLOB_READ_WRITE_TOKEN);
+const blobPath = (filename: string) => `product-images/${filename}`;
+const blobAccess = () => (process.env.SORA_BLOB_ACCESS === "public" ? "public" : "private") as "public" | "private";
+
+async function writeImageFile(filename: string, data: Buffer) {
+  if (blobStorageEnabled()) {
+    await put(blobPath(filename), data, { access: blobAccess(), contentType: "image/webp", addRandomSuffix: false, allowOverwrite: false });
+    return;
+  }
+  const handle = await open(path.join(productImageDirectory(), filename), "wx");
+  try { await handle.writeFile(data); } finally { await handle.close(); }
+}
+
+async function deleteImageFile(filename: string) {
+  if (blobStorageEnabled()) { await del(blobPath(filename)).catch((error: unknown) => { if (!(error instanceof BlobNotFoundError)) throw error; }); return; }
+  await unlink(path.join(productImageDirectory(), filename)).catch((error: NodeJS.ErrnoException) => { if (error.code !== "ENOENT") throw error; });
+}
+
+async function readImageFile(filename: string) {
+  if (blobStorageEnabled()) {
+    const result = await get(blobPath(filename), { access: blobAccess() });
+    if (!result || !result.stream) throw new Error("Missing blob");
+    return Buffer.from(await new Response(result.stream).arrayBuffer());
+  }
+  const target = path.join(productImageDirectory(), filename);
+  const stat = await lstat(target);
+  if (!stat.isFile() || stat.isSymbolicLink()) throw new Error("Invalid file");
+  return await readFile(target);
+}
+
 export function managedImageFilename(url: string | null | undefined) {
   if (!url?.startsWith(routePrefix)) return null;
   const name = url.slice(routePrefix.length);
@@ -23,7 +59,7 @@ export function managedImageFilename(url: string | null | undefined) {
 export async function removeStoredImages(paths: Array<string | null | undefined>) {
   for (const url of paths) {
     const filename = managedImageFilename(url);
-    if (filename) await unlink(path.join(productImageDirectory(), filename)).catch((error: NodeJS.ErrnoException) => { if (error.code !== "ENOENT") throw error; });
+    if (filename) await deleteImageFile(filename);
   }
 }
 
@@ -44,13 +80,12 @@ export async function storeProductImage(bytes: Buffer): Promise<StoredProductIma
   } catch { throw new AppError("Choose a valid, non-animated JPEG, PNG or WebP image (up to 40 megapixels).", 400, "INVALID_IMAGE"); }
   const key = randomUUID();
   const stored = { imagePath: `${routePrefix}${key}.webp`, imageThumbnailPath: `${routePrefix}${key}-thumb.webp` };
-  await mkdir(productImageDirectory(), { recursive: true });
+  if (!blobStorageEnabled()) await mkdir(productImageDirectory(), { recursive: true });
   const written: string[] = [];
   try {
     for (const [url, data] of [[stored.imagePath, image], [stored.imageThumbnailPath, thumbnail]] as const) {
-      const handle = await open(path.join(productImageDirectory(), managedImageFilename(url)!), "wx");
       written.push(url);
-      try { await handle.writeFile(data); } finally { await handle.close(); }
+      await writeImageFile(managedImageFilename(url)!, data);
     }
   } catch (error) { await removeStoredImages(written).catch(() => {}); throw error; }
   return stored;
@@ -58,10 +93,7 @@ export async function storeProductImage(bytes: Buffer): Promise<StoredProductIma
 
 export async function readStoredProductImage(filename: string) {
   if (!filenamePattern.test(filename)) throw new AppError("Image not found.", 404, "IMAGE_NOT_FOUND");
-  const target = path.join(productImageDirectory(), filename);
   try {
-    const stat = await lstat(target);
-    if (!stat.isFile() || stat.isSymbolicLink()) throw new Error("Invalid file");
-    return await readFile(target);
+    return await readImageFile(filename);
   } catch { throw new AppError("Image not found.", 404, "IMAGE_NOT_FOUND"); }
 }

@@ -1,16 +1,14 @@
-import { execSync } from "node:child_process";
 import fs from "node:fs";
+import { createClient } from "@libsql/client";
+import { applyMigrations } from "../scripts/db-migrate";
 
 const files = ["prisma/test.db", "prisma/test.db-journal", "prisma/test.db-wal", "prisma/test.db-shm"];
 
-export default function setup() {
+export default async function setup() {
   for (const file of files) {
     if (fs.existsSync(file)) fs.unlinkSync(file);
   }
-  // Prisma's SQLite migration engine expects the database file to exist on Windows.
-  fs.closeSync(fs.openSync(files[0], "w"));
-  execSync("npx prisma migrate deploy", {
-    stdio: "inherit",
-    env: { ...process.env, DATABASE_URL: "file:./prisma/test.db" },
-  });
+  // Same migration runner as deploys, always against the isolated local test file.
+  const client = createClient({ url: "file:./prisma/test.db" });
+  try { await applyMigrations(client); } finally { client.close(); }
 }
