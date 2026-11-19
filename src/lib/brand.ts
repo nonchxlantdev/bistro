@@ -5,8 +5,8 @@ export const DEMO_BRAND = {
   environment: "Demo Environment",
   location: "Main Branch",
   platform: "Vision Forge Studio",
-  logo: "/branding/salud-bistro-logo.png",
-  wordmark: "/branding/salud-bistro-wordmark.png",
+  logo: "/branding/salud-bistro-logo-alpha.png",
+  wordmark: "/branding/salud-bistro-wordmark-alpha.png",
 } as const;
 
 /** Upgrade the original sample identity on display; keep custom restaurant names. */

@@ -123,6 +123,19 @@
   height: min(900px, calc(100dvh - 32px)); max-height: calc(100dvh - 32px);
 }
 .settlement-workspace h2, .settlement-workspace h3, .settlement-workspace p { overflow-wrap: anywhere; }
+/* Brand logo: alpha-mask tint with prefixes; falls back to the plain transparent image. */
+.brand-logo { display: inline-block; vertical-align: middle; }
+.brand-logo > img { display: block; width: 100%; height: auto; }
+@supports ((-webkit-mask-image: url("")) or (mask-image: url(""))) {
+  .brand-logo {
+    background-color: currentColor;
+    -webkit-mask-image: var(--brand-logo); mask-image: var(--brand-logo);
+    -webkit-mask-size: contain; mask-size: contain;
+    -webkit-mask-position: center; mask-position: center;
+    -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  }
+  .brand-logo > img { opacity: 0; }
+}
 .welcome-mark { animation: salud-logo-reveal 900ms cubic-bezier(.2,.65,.3,1) both; }
 .welcome-copy { animation: salud-copy-reveal 700ms 250ms ease-out both; }
 .welcome-track span { transform-origin: left; animation: salud-progress 2200ms linear both; }

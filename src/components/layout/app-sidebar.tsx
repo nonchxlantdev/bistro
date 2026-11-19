@@ -20,7 +20,7 @@ export function AppSidebar({ onNavigate, mode = "full" }: { onNavigate?: () => v
   const pathname = usePathname();
   const label = mode === "rail" ? "sr-only" : mode === "responsive" ? "hidden min-[1440px]:block" : "block";
   return <div className="flex h-full flex-col overflow-y-auto bg-sidebar text-sidebar-foreground">
-    <div className="flex shrink-0 flex-col items-center gap-3 px-3 pt-4 pb-5">
+    <div className={cn("flex shrink-0 flex-col items-center gap-3 px-3 pb-5", onNavigate ? "pt-12" : "pt-4")}>
       <div className="w-[94%]"><BrandLogo wordmark className="h-auto w-full" /></div>
       <p className={cn("text-center text-xs text-sidebar-foreground/80", label)}>Restaurant & Café</p>
       <span className="rounded border border-sidebar-border px-2 py-0.5 text-[11px] font-semibold tracking-wide text-sidebar-foreground/75">DEMO</span>
